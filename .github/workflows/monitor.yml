@@ -1,0 +1,44 @@
+name: Booking Monitor
+
+on:
+  schedule:
+    - cron: '*/10 * * * *' # 每 10 分鐘重啟一次以確保持續執行
+    - cron: '0 1 * * *'    # 每天 09:00 UTC+8 發送心跳
+  workflow_dispatch:
+
+# 確保同一時間只有一個監控任務在執行，新的任務會取消舊的
+concurrency:
+  group: booking-monitor
+  cancel-in-progress: true
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Send Heartbeat
+        if: github.event.schedule == '0 1 * * *'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python monitor_booking_api.py --heartbeat
+
+      - name: Run Monitor Loop
+        if: github.event.schedule != '0 1 * * *'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        # 不帶 --once 參數，程式會進入 while True 迴圈，每 5 秒執行一次
+        run: python monitor_booking_api.py
