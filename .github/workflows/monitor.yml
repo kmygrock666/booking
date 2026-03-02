@@ -3,6 +3,7 @@ name: Booking Monitor
 on:
   schedule:
     - cron: '*/10 * * * *' # 每 10 分鐘重啟一次以確保持續執行
+    # 注意：GitHub Actions 的排程並非準時觸發，通常會有 30 分鐘到數小時的延遲。
     - cron: '0 1 * * *'    # 每天 09:00 UTC+8 發送心跳
   workflow_dispatch:
 
@@ -40,5 +41,6 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        # 不帶 --once 參數，程式會進入 while True 迴圈，每 5 秒執行一次
+          INLINE_COOKIE: ${{ secrets.INLINE_COOKIE }}
+        # 不帶 --once 參數，程式會進入 while True 迴圈，每 60 秒執行一次
         run: python monitor_booking_api.py

@@ -5,8 +5,10 @@
 ![監控狀態](https://github.com/ian-yu/booking/actions/workflows/monitor.yml/badge.svg)
 
 ## 功能特點
-- 每 5 秒檢查一次 API，偵測可用性變動。
-- 當可用性改變或發生錯誤時，發送 Telegram 通知。
+- 串接 Capacity API，精準監控每日空位與可用時段。
+- 整合防機器人 Headers，降低被封鎖風險。
+- 每 60 秒檢查一次可用性變動。
+- 當發現空位或發生錯誤時，發送 Telegram 通知。
 - 每日發送「心跳 (Heartbeat)」訊息，確認系統正常執行中。
 
 ## 本地使用方法
