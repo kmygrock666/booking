@@ -31,6 +31,7 @@ def get_header_value(env_name, hardcoded_val, default=""):
 DEFAULT_HEADERS = {
     'accept': '*/*',
     'accept-language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
+    'priority': 'u=1, i',
     'referer': 'https://inline.app/booking/-NeqTSgDQOAYi30lg4a7:inline-live-3/-OUYVD5L8af9l-fOxBi5',
     'sec-ch-ua': '"Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
     'sec-ch-ua-mobile': '?0',
@@ -61,7 +62,6 @@ class BookingMonitor:
 
     def send_telegram_notification(self, message):
         self.log("Sending Telegram notification...")
-        # Since we use curl_cffi for the main request, we can still use it here or stick to its requests
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
         payload = {
             "chat_id": self.chat_id,
@@ -69,7 +69,6 @@ class BookingMonitor:
             "parse_mode": "HTML"
         }
         try:
-            # Telegram API is usually fine with standard requests, but curl_cffi works too
             response = requests.post(url, json=payload, timeout=10)
             response.raise_for_status()
             self.log("Notification sent successfully.")
@@ -98,7 +97,9 @@ class BookingMonitor:
             response = requests.get(API_URL, headers=headers, timeout=15, impersonate="chrome")
             
             if response.status_code == 403:
-                error_msg = "<b>🚫 API Blocked (403)!</b>\nTLS 指紋偽裝失敗或 Cookie 已過期。\n來源: " + ("Hardcoded" if STRICT_HARDCODE else "Env/Hardcoded Mixed")
+                error_msg = "<b>🚫 API Blocked (403)!</b>\nGitHub 可能被偵測為機器人或身份過期。"
+                if self.debug_mode:
+                    self.log(f"DEBUG: 403 Body Snippet: {response.text[:500]}")
                 self.log(error_msg.replace("<b>", "").replace("</b>", ""))
                 self.send_telegram_notification(error_msg)
                 return False
@@ -135,12 +136,10 @@ class BookingMonitor:
                 return False
                 
         except Exception as e:
-            # curl_cffi exceptions might be different, catching all for simplicity in monitoring
             error_msg = f"<b>❌ Error:</b>\n<code>{str(e)}</code>"
             self.log(error_msg.replace("<b>", "").replace("</b>", ""))
-            # If it's a 403 or similar caught here
             if "403" in str(e):
-                self.send_telegram_notification("<b>🚫 API Blocked (403)!</b>\n連線被拒絕，請檢查 Cookie 與 Headers。")
+                self.send_telegram_notification("<b>🚫 API Blocked (403)!</b>\n連線被拒絕，請檢查身份資訊。")
             else:
                 self.send_telegram_notification(error_msg)
             return False
@@ -156,7 +155,6 @@ def main():
     
     args = parser.parse_args()
     
-    # Use os.getenv because curl_cffi doesn't provide it, we use it for secrets
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     
