@@ -13,6 +13,14 @@ load_dotenv()
 # Configuration
 API_URL = "https://inline.app/api/booking-capacitiesV3?companyId=-NeqTSgDQOAYi30lg4a7%3Ainline-live-3&branchId=-OUYVD5L8af9l-fOxBi5"
 
+# --- 這裡可直接貼上您的資訊 (也可透過 .env 或 GitHub Secrets 設定) ---
+# 如果您不想使用環境變數，可以直接在下面的引號內填入您的值
+HARDCODED_COOKIE = "" 
+HARDCODED_USER_AGENT = ""
+HARDCODED_FINGERPRINT = ""
+HARDCODED_SESSION_ID = ""
+# -------------------------------------------------------------------
+
 # Advanced Headers for Bot Protection (from User's Curl)
 DEFAULT_HEADERS = {
     'accept': '*/*',
@@ -24,9 +32,9 @@ DEFAULT_HEADERS = {
     'sec-fetch-dest': 'empty',
     'sec-fetch-mode': 'cors',
     'sec-fetch-site': 'same-origin',
-    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
-    'x-client-fingerprint': 'cbc33eeaf2599371bbe02b27aa3f9c6c',
-    'x-client-session-id': '237ca41d-280b-4960-8954-bf627980c87f',
+    'user-agent': os.getenv("USER_AGENT") or HARDCODED_USER_AGENT or 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
+    'x-client-fingerprint': os.getenv("X_CLIENT_FINGERPRINT") or HARDCODED_FINGERPRINT or 'cbc33eeaf2599371bbe02b27aa3f9c6c',
+    'x-client-session-id': os.getenv("X_CLIENT_SESSION_ID") or HARDCODED_SESSION_ID or '237ca41d-280b-4960-8954-bf627980c87f',
 }
 
 class BookingMonitor:
@@ -63,7 +71,7 @@ class BookingMonitor:
                 headers['Cookie'] = self.cookie
                 
             response = requests.get(API_URL, headers=headers, timeout=15)
-            
+
             if response.status_code == 403:
                 error_msg = "<b>🚫 API Blocked (403)!</b>\nYour cookie might have expired. Please update INLINE_COOKIE in your .env file."
                 self.log(error_msg.replace("<b>", "").replace("</b>", ""))
@@ -72,7 +80,7 @@ class BookingMonitor:
                 
             response.raise_for_status()
             data = response.json()
-            
+            print(data)
             if self.debug_mode:
                 self.log("DEBUG: Raw API Response:")
                 print(json.dumps(data, indent=2, ensure_ascii=False))
@@ -128,7 +136,7 @@ def main():
     
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
-    cookie = os.getenv("INLINE_COOKIE", "")
+    cookie = os.getenv("INLINE_COOKIE") or HARDCODED_COOKIE
     
     if not bot_token or not chat_id:
         print("❌ Error: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set.")

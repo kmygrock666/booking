@@ -42,5 +42,8 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           INLINE_COOKIE: ${{ secrets.INLINE_COOKIE }}
+          USER_AGENT: ${{ secrets.USER_AGENT }}
+          X_CLIENT_FINGERPRINT: ${{ secrets.X_CLIENT_FINGERPRINT }}
+          X_CLIENT_SESSION_ID: ${{ secrets.X_CLIENT_SESSION_ID }}
         # 不帶 --once 參數，程式會進入 while True 迴圈，每 60 秒執行一次
         run: python monitor_booking_api.py
