@@ -9,7 +9,7 @@ class TestMonitor(unittest.TestCase):
         self.monitor = BookingMonitor("fake_token", "fake_chat_id", "fake_cookie", ["2026-03-11", "2026-03-12"])
 
     @patch('monitor_booking_api.BookingMonitor.log')
-    @patch('monitor_booking_api.requests.get')
+    @patch('curl_cffi.requests.get')
     @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
     def test_multi_date_detection(self, mock_notify, mock_get, mock_log):
         # Mock Capacity API response with multiple open dates
@@ -35,7 +35,7 @@ class TestMonitor(unittest.TestCase):
         self.assertIn("2026-03-12", mock_notify.call_args[0][0])
 
     @patch('monitor_booking_api.BookingMonitor.log')
-    @patch('monitor_booking_api.requests.get')
+    @patch('curl_cffi.requests.get')
     @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
     def test_no_open_slots(self, mock_notify, mock_get, mock_log):
         # Mock Capacity API response with no open slots
@@ -57,7 +57,7 @@ class TestMonitor(unittest.TestCase):
         mock_notify.assert_not_called()
 
     @patch('monitor_booking_api.BookingMonitor.log')
-    @patch('monitor_booking_api.requests.get')
+    @patch('curl_cffi.requests.get')
     @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
     def test_403_blocking_notification(self, mock_notify, mock_get, mock_log):
         # Mock 403 Forbidden

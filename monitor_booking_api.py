@@ -1,4 +1,4 @@
-import requests
+from curl_cffi import requests
 import time
 import json
 import argparse
@@ -38,17 +38,17 @@ DEFAULT_HEADERS = {
     'sec-fetch-dest': 'empty',
     'sec-fetch-mode': 'cors',
     'sec-fetch-site': 'same-origin',
-    'user-agent': get_header_value("USER_AGENT", HARDCODED_USER_AGENT, 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36'),
-    'x-client-fingerprint': get_header_value("X_CLIENT_FINGERPRINT", HARDCODED_FINGERPRINT, 'cbc33eeaf2599371bbe02b27aa3f9c6c'),
-    'x-client-session-id': get_header_value("X_CLIENT_SESSION_ID", HARDCODED_SESSION_ID, '237ca41d-280b-4960-8954-bf627980c87f'),
 }
 
 class BookingMonitor:
-    def __init__(self, bot_token, chat_id, cookie="", target_dates=None):
+    def __init__(self, bot_token, chat_id, cookie="", target_dates=None, user_agent=None, fingerprint=None, session_id=None):
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.cookie = cookie
         self.target_dates = target_dates or ["2026-03-11"]
+        self.user_agent = user_agent
+        self.fingerprint = fingerprint
+        self.session_id = session_id
         self.debug_mode = False
 
     def log(self, message):
@@ -61,6 +61,7 @@ class BookingMonitor:
 
     def send_telegram_notification(self, message):
         self.log("Sending Telegram notification...")
+        # Since we use curl_cffi for the main request, we can still use it here or stick to its requests
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
         payload = {
             "chat_id": self.chat_id,
@@ -68,6 +69,7 @@ class BookingMonitor:
             "parse_mode": "HTML"
         }
         try:
+            # Telegram API is usually fine with standard requests, but curl_cffi works too
             response = requests.post(url, json=payload, timeout=10)
             response.raise_for_status()
             self.log("Notification sent successfully.")
@@ -80,16 +82,23 @@ class BookingMonitor:
             headers = DEFAULT_HEADERS.copy()
             if self.cookie:
                 headers['Cookie'] = self.cookie
+            if self.user_agent:
+                headers['user-agent'] = self.user_agent
+            if self.fingerprint:
+                headers['x-client-fingerprint'] = self.fingerprint
+            if self.session_id:
+                headers['x-client-session-id'] = self.session_id
             
             if self.debug_mode:
                 self.log("DEBUG: Sent Headers (Masked):")
                 debug_headers = {k: (self.mask_string(v) if k.lower() in ['cookie', 'user-agent', 'x-client-fingerprint', 'x-client-session-id'] else v) for k, v in headers.items()}
                 print(json.dumps(debug_headers, indent=2))
-                
-            response = requests.get(API_URL, headers=headers, timeout=15)
+            
+            # Use impersonate="chrome" to bypass TLS fingerprinting blocks
+            response = requests.get(API_URL, headers=headers, timeout=15, impersonate="chrome")
             
             if response.status_code == 403:
-                error_msg = "<b>🚫 API Blocked (403)!</b>\nGitHub 可能被偵測為機器人或 Cookie 已過期。\n來源: " + ("Hardcoded" if STRICT_HARDCODE else "Env/Hardcoded Mixed")
+                error_msg = "<b>🚫 API Blocked (403)!</b>\nTLS 指紋偽裝失敗或 Cookie 已過期。\n來源: " + ("Hardcoded" if STRICT_HARDCODE else "Env/Hardcoded Mixed")
                 self.log(error_msg.replace("<b>", "").replace("</b>", ""))
                 self.send_telegram_notification(error_msg)
                 return False
@@ -125,18 +134,15 @@ class BookingMonitor:
                 self.log("No target dates available.")
                 return False
                 
-        except requests.exceptions.Timeout:
-            error_msg = "<b>⚠️ Timeout Error:</b>\nAPI request timed out. Retrying later..."
-            self.log(error_msg.replace("<b>", "").replace("</b>", ""))
-            return False
-        except requests.exceptions.ConnectionError:
-            error_msg = "<b>⚠️ Connection Error:</b>\nFailed to connect to Inline API."
-            self.log(error_msg.replace("<b>", "").replace("</b>", ""))
-            return False
         except Exception as e:
-            error_msg = f"<b>❌ Unexpected Error:</b>\n<code>{str(e)}</code>"
+            # curl_cffi exceptions might be different, catching all for simplicity in monitoring
+            error_msg = f"<b>❌ Error:</b>\n<code>{str(e)}</code>"
             self.log(error_msg.replace("<b>", "").replace("</b>", ""))
-            self.send_telegram_notification(error_msg)
+            # If it's a 403 or similar caught here
+            if "403" in str(e):
+                self.send_telegram_notification("<b>🚫 API Blocked (403)!</b>\n連線被拒絕，請檢查 Cookie 與 Headers。")
+            else:
+                self.send_telegram_notification(error_msg)
             return False
 
 def main():
@@ -150,6 +156,7 @@ def main():
     
     args = parser.parse_args()
     
+    # Use os.getenv because curl_cffi doesn't provide it, we use it for secrets
     bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
     chat_id = os.getenv("TELEGRAM_CHAT_ID")
     
@@ -158,18 +165,22 @@ def main():
         sys.exit(1)
 
     cookie = get_header_value("INLINE_COOKIE", HARDCODED_COOKIE)
+    user_agent = get_header_value("USER_AGENT", HARDCODED_USER_AGENT)
+    fingerprint = get_header_value("X_CLIENT_FINGERPRINT", HARDCODED_FINGERPRINT)
+    session_id = get_header_value("X_CLIENT_SESSION_ID", HARDCODED_SESSION_ID)
+    
     target_dates_str = args.dates or os.getenv("TARGET_DATES", "2026-03-11")
     target_dates = [d.strip() for d in target_dates_str.split(",") if d.strip()]
     
-    monitor = BookingMonitor(bot_token, chat_id, cookie, target_dates)
+    monitor = BookingMonitor(bot_token, chat_id, cookie, target_dates, user_agent, fingerprint, session_id)
     monitor.debug_mode = args.debug
     
     if args.test_notify:
-        monitor.send_telegram_notification("<b>🔔 Test Notification</b>\nCapacity monitor is active.")
+        monitor.send_telegram_notification("<b>🔔 Test Notification</b>\nCapacity monitor is active (impersonating Chrome).")
         return
 
     if args.heartbeat:
-        monitor.send_telegram_notification("<b>💓 Heartbeat</b>\nCapacity monitor is running normally.")
+        monitor.send_telegram_notification("<b>💓 Heartbeat</b>\nCapacity monitor is running normally (impersonating Chrome).")
         return
 
     if args.once:
