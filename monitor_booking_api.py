@@ -16,10 +16,10 @@ API_URL = "https://inline.app/api/booking-capacitiesV3?companyId=-NeqTSgDQOAYi30
 # --- 這裡可直接貼上您的資訊 (也可透過 .env 或 GitHub Secrets 設定) ---
 # [重要] 如果您在 GitHub Actions 遇到 403，請將資訊填入下方並將 STRICT_HARDCODE 設為 True
 STRICT_HARDCODE = True # 設為 True 則完全忽略環境變數，強制使用下方填寫的值
-HARDCODED_COOKIE = "" 
-HARDCODED_USER_AGENT = ""
-HARDCODED_FINGERPRINT = ""
-HARDCODED_SESSION_ID = ""
+HARDCODED_COOKIE = "_ga=GA1.1.1662062606.1746690133; _pxvid=f337bd72-2bdf-11f0-9c06-148c2cc1e949; _pxhd=85dd4b5f9026c108ae65ee8d7da56f0845e5d685fa6355c9904d0d1d51290c1b:f337bd72-2bdf-11f0-9c06-148c2cc1e949; _gcl_au=1.1.732187914.1771833643; _fbp=fb.1.1771833642703.321328009879496900; pxcts=c0498aae-108d-11f1-bf05-6ea03020c09e; _px3=ca8757c69749d3fc752648efce6890706156c78b5b8914e2d0dbc4a91776e102:KFjWt36L1OWYJbNyox4N1uPD6xAHYTzJLgx1MQLJukW3I3THk9uR6AWqwzgfvtvioG+c+LArGHbfvCxxvCx0zA==:1000:7rcdBSLaJ8IcelKLzyr2s34SSGzYtMOdXBdf2KU48HYagBjT8Sa+oBllCNYumSiPkKn1IeVWv/tHnS0LIZBnpiFwWQx41kf6Vyc5K7TmhDNWu7OgT1+OhJdFAk5hYtjlxGi3Aj87I8/SXDaGzcWveD4mad3MWoK9+rU0kdlWoY1Ml0LNoM+RFb5T6d2Nzp11MbyAQqjAnR/x0vG4aj4O30bkfG/AWwKuc8cmwivP/5TeUtu4xAY9Boy/vfaozc85mvaBSXp/v+9bgsrsCkQrsdxprR97Qc2Qm9+14fTgO3ZdNCWfEOG+uHMLsKhXlXU/1ELoLKcgjjF4YzuUOuWgJLk/4iSY0N4drVnk2jg9rt6Z4hCFcw5uBXVK+cy+jjXoBA2c5OaXFwnuuzqGHltaZ3xUvCzazOBtyWrl7bdUJycL7bwnJZtA0JcYt4UT42/n5DhgO1BgMj8HSWNPGJzeJXyTgF3Y4FE6dm8rRo7ff7Qpij5tPA75/jpn9FMg1o0t; _clck=1u2y7pf%5E2%5Eg40%5E0%5E1954; _clsk=1l52jv6%5E1772468215079%5E1%5E0%5Ek.clarity.ms%2Fcollect; mp_c153a2e7d8ab430d4f6087e52e535ee8_mixpanel=%7B%22distinct_id%22%3A%22%24device%3Ae3fa772c-5535-4265-a631-3f89161200da%22%2C%22%24device_id%22%3A%22e3fa772c-5535-4265-a631-3f89161200da%22%2C%22%24initial_referrer%22%3A%22%24direct%22%2C%22%24initial_referring_domain%22%3A%22%24direct%22%2C%22__mps%22%3A%7B%7D%2C%22__mpso%22%3A%7B%22%24initial_referrer%22%3A%22%24direct%22%2C%22%24initial_referring_domain%22%3A%22%24direct%22%7D%2C%22__mpus%22%3A%7B%7D%2C%22__mpa%22%3A%7B%7D%2C%22__mpu%22%3A%7B%7D%2C%22__mpr%22%3A%5B%5D%2C%22__mpap%22%3A%5B%5D%2C%22%24search_engine%22%3A%22google%22%7D; cf_clearance=3049r5WYaOS2dWGopm63Wq4VkIti4D4ueSpiXHfQ4BA-1772468219-1.2.1.1-._y8qhFQMNJ5eViolWCTWPv__h0RJzKb9fdWxz.u0s5r5D_a3BNWcsYtORs.Uc.k4_i.Iw_8fUwBSQYBN6ao1_x3YOUu2bdCm.JJCrSFtbfiptgagQoGOLGnGQnG_bbWYG6lc6oHqR26mp8c.OVokx4BYNmamp4zKDXazVBOoZAUaVydvPY81IGZbU42zZV.uWTbsiHyz5o133g_JtIncCuXdxgpG64LpezLC0_xWXc; _ga_6EKTQH8DYH=GS2.1.s1772468218$o8$g1$t1772468220$j58$l0$h0; _ga_NJJ9CTT701=GS2.1.s1772468218$o10$g1$t1772468220$j58$l0$h0; _ga_LQ2HBGK93X=GS2.1.s1772468218$o8$g1$t1772468220$j58$l0$h690474817"
+HARDCODED_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36"
+HARDCODED_FINGERPRINT = "cbc33eeaf2599371bbe02b27aa3f9c6c"
+HARDCODED_SESSION_ID = "97ac085d-0786-493f-8fcc-03b9d8ecef3b"
 # -------------------------------------------------------------------
 
 def get_header_value(env_name, hardcoded_val, default=""):
