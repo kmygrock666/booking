@@ -11,7 +11,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuration
-API_URL = "https://inline.app/api/booking-capacitiesV3?companyId=-NeqTSgDQOAYi30lg4a7%3Ainline-live-3&branchId=-OUYVD5L8af9l-fOxBi5"
+# API_URL = "https://inline.app/api/booking-capacitiesV3?companyId=-NeqTSgDQOAYi30lg4a7%3Ainline-live-3&branchId=-OUYVD5L8af9l-fOxBi5"
+# 島語-台中漢神洲際店
+API_URL = "https://inline.app/api/booking-capacitiesV3?companyId=-NeqTSgDQOAYi30lg4a7%3Ainline-live-3&branchId=-OuaB8PT0YWMRAavQhfS"
 
 # --- 這裡可直接貼上您的資訊 (也可透過 .env 或 GitHub Secrets 設定) ---
 # [重要] 如果您在 GitHub Actions 遇到 403，請將資訊填入下方並將 STRICT_HARDCODE 設為 True
@@ -42,15 +44,36 @@ DEFAULT_HEADERS = {
 }
 
 class BookingMonitor:
-    def __init__(self, bot_token, chat_id, cookie="", target_dates=None, user_agent=None, fingerprint=None, session_id=None):
+    def __init__(self, bot_token, chat_id, cookie="", target_dates=None, user_agent=None, fingerprint=None, session_id=None, state_file=None):
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.cookie = cookie
-        self.target_dates = target_dates or ["2026-03-11"]
+        self.target_dates = target_dates or ["2026-08-15"]
         self.user_agent = user_agent
         self.fingerprint = fingerprint
         self.session_id = session_id
         self.debug_mode = False
+        self.state_file = state_file  # 用檔案保存狀態，讓 --once 模式 (如 GitHub Actions) 也能跨執行去重
+        self.last_open_dates = self._load_state()  # 上次檢查到的開放日期集合，用來避免重複通知
+
+    def _load_state(self):
+        if not self.state_file or not os.path.exists(self.state_file):
+            return None
+        try:
+            with open(self.state_file) as f:
+                return set(json.load(f).get("open_dates", []))
+        except Exception as e:
+            print(f"Warning: failed to load state file: {e}")
+            return None
+
+    def _save_state(self):
+        if not self.state_file:
+            return
+        try:
+            with open(self.state_file, "w") as f:
+                json.dump({"open_dates": sorted(self.last_open_dates or [])}, f)
+        except Exception as e:
+            print(f"Warning: failed to save state file: {e}")
 
     def log(self, message):
         print(f"[{datetime.now()}] {message}")
@@ -106,7 +129,7 @@ class BookingMonitor:
                 
             response.raise_for_status()
             data = response.json()
-            
+            print(f"API Response Status: {response.status_code}")
             if self.debug_mode:
                 self.log("DEBUG: Raw API Response:")
                 print(json.dumps(data, indent=2, ensure_ascii=False))
@@ -114,6 +137,13 @@ class BookingMonitor:
             # The API returns data nested under a 'default' key
             capacities = data.get("default", data)
             
+            # 收集 API 回傳中所有開放的日期
+            all_open_dates = []
+            for date_str in sorted(capacities.keys()):
+                info = capacities.get(date_str)
+                if isinstance(info, dict) and info.get("status") == "open":
+                    all_open_dates.append(date_str)
+
             available_days = []
             for target_date in self.target_dates:
                 info = capacities.get(target_date)
@@ -121,18 +151,33 @@ class BookingMonitor:
                     times_list = list(info.get("times", {}).keys())
                     times_str = ", ".join(times_list) if times_list else "All Times"
                     available_days.append(f"📅 <b>{target_date}</b>\nSlots: {times_str}")
-            
+
+            open_set = set(all_open_dates)
+            open_changed = self.last_open_dates is None or open_set != self.last_open_dates
+            self.last_open_dates = open_set
+            self._save_state()
+
+            all_open_section = (
+                "<b>📋 所有可訂位日期:</b>\n" + "\n".join(f"• {d}" for d in all_open_dates)
+                if all_open_dates else "<b>📋 目前沒有任何可訂位日期</b>"
+            )
+            booking_link = '<a href="https://inline.app/booking/-NeqTSgDQOAYi30lg4a7:inline-live-3/-OUYVD5L8af9l-fOxBi5">👉 Book Now</a>'
+
             if available_days:
                 msg = (
                     f"<b>🎯 TARGET DATES OPEN!</b>\n\n"
                     + "\n\n".join(available_days) + "\n\n"
-                    f'<a href="https://inline.app/booking/-NeqTSgDQOAYi30lg4a7:inline-live-3/-OUYVD5L8af9l-fOxBi5">👉 Book Now</a>'
+                    + all_open_section + "\n\n"
+                    + booking_link
                 )
-                self.log(f"Found {len(available_days)} target open days!")
+                self.log(f"Found {len(available_days)} target open days! (all open: {len(all_open_dates)})")
                 self.send_telegram_notification(msg)
                 return True
             else:
-                self.log("No target dates available.")
+                self.log(f"No target dates available. All open dates: {', '.join(all_open_dates) or 'none'}")
+                # 開放日期清單有變化時才通知，避免重複轟炸
+                if open_changed and all_open_dates:
+                    self.send_telegram_notification(all_open_section + "\n\n" + booking_link)
                 return False
                 
         except Exception as e:
@@ -152,6 +197,7 @@ def main():
     parser.add_argument("--interval", type=int, default=60, help="Check interval in seconds (default: 60).")
     parser.add_argument("--dates", type=str, help="Comma-separated target dates (overrides .env).")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode to show raw API response.")
+    parser.add_argument("--state-file", type=str, default=os.getenv("STATE_FILE"), help="Path to a JSON file for persisting seen open dates across runs (for --once mode).")
     
     args = parser.parse_args()
     
@@ -167,10 +213,10 @@ def main():
     fingerprint = get_header_value("X_CLIENT_FINGERPRINT", HARDCODED_FINGERPRINT)
     session_id = get_header_value("X_CLIENT_SESSION_ID", HARDCODED_SESSION_ID)
     
-    target_dates_str = args.dates or os.getenv("TARGET_DATES", "2026-03-11")
+    target_dates_str = args.dates or os.getenv("TARGET_DATES", "2026-08-15")
     target_dates = [d.strip() for d in target_dates_str.split(",") if d.strip()]
     
-    monitor = BookingMonitor(bot_token, chat_id, cookie, target_dates, user_agent, fingerprint, session_id)
+    monitor = BookingMonitor(bot_token, chat_id, cookie, target_dates, user_agent, fingerprint, session_id, state_file=args.state_file)
     monitor.debug_mode = args.debug
     
     if args.test_notify:
