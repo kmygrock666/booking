@@ -1,8 +1,10 @@
 from curl_cffi import requests
+import html
 import time
 import json
 import argparse
 from datetime import datetime
+from urllib.parse import quote
 import os
 import sys
 from dotenv import load_dotenv
@@ -11,9 +13,10 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuration
-# API_URL = "https://inline.app/api/booking-capacitiesV3?companyId=-NeqTSgDQOAYi30lg4a7%3Ainline-live-3&branchId=-OUYVD5L8af9l-fOxBi5"
-# 島語-台中漢神洲際店
-API_URL = "https://inline.app/api/booking-capacitiesV3?companyId=-NeqTSgDQOAYi30lg4a7%3Ainline-live-3&branchId=-OuaB8PT0YWMRAavQhfS"
+COMPANY_ID = "-NeqTSgDQOAYi30lg4a7:inline-live-3"
+BRANCH_ID = "-OuaB8PT0YWMRAavQhfS"  # 島語-台中漢神洲際店 (舊: -OUYVD5L8af9l-fOxBi5)
+API_URL = f"https://inline.app/api/booking-capacitiesV3?companyId={quote(COMPANY_ID, safe='')}&branchId={BRANCH_ID}"
+BOOKING_URL = f"https://inline.app/booking/{COMPANY_ID}/{BRANCH_ID}"
 
 # --- 這裡可直接貼上您的資訊 (也可透過 .env 或 GitHub Secrets 設定) ---
 # [重要] 如果您在 GitHub Actions 遇到 403，請將資訊填入下方並將 STRICT_HARDCODE 設為 True
@@ -34,7 +37,7 @@ DEFAULT_HEADERS = {
     'accept': '*/*',
     'accept-language': 'zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7',
     'priority': 'u=1, i',
-    'referer': 'https://inline.app/booking/-NeqTSgDQOAYi30lg4a7:inline-live-3/-OUYVD5L8af9l-fOxBi5',
+    'referer': BOOKING_URL,
     'sec-ch-ua': '"Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
     'sec-ch-ua-mobile': '?0',
     'sec-ch-ua-platform': '"macOS"',
@@ -98,26 +101,28 @@ class BookingMonitor:
         except Exception as e:
             self.log(f"Failed to send notification: {e}")
 
+    def _build_headers(self):
+        headers = DEFAULT_HEADERS.copy()
+        sensitive = {
+            'Cookie': self.cookie,
+            'user-agent': self.user_agent,
+            'x-client-fingerprint': self.fingerprint,
+            'x-client-session-id': self.session_id,
+        }
+        headers.update({k: v for k, v in sensitive.items() if v})
+
+        if self.debug_mode:
+            self.log("DEBUG: Sent Headers (Masked):")
+            sensitive_keys = {k.lower() for k in sensitive}
+            debug_headers = {k: (self.mask_string(v) if k.lower() in sensitive_keys else v) for k, v in headers.items()}
+            print(json.dumps(debug_headers, indent=2))
+        return headers
+
     def check_booking_status(self):
         self.log(f"Checking booking status for dates: {', '.join(self.target_dates)}")
         try:
-            headers = DEFAULT_HEADERS.copy()
-            if self.cookie:
-                headers['Cookie'] = self.cookie
-            if self.user_agent:
-                headers['user-agent'] = self.user_agent
-            if self.fingerprint:
-                headers['x-client-fingerprint'] = self.fingerprint
-            if self.session_id:
-                headers['x-client-session-id'] = self.session_id
-            
-            if self.debug_mode:
-                self.log("DEBUG: Sent Headers (Masked):")
-                debug_headers = {k: (self.mask_string(v) if k.lower() in ['cookie', 'user-agent', 'x-client-fingerprint', 'x-client-session-id'] else v) for k, v in headers.items()}
-                print(json.dumps(debug_headers, indent=2))
-            
             # Use impersonate="chrome" to bypass TLS fingerprinting blocks
-            response = requests.get(API_URL, headers=headers, timeout=15, impersonate="chrome")
+            response = requests.get(API_URL, headers=self._build_headers(), timeout=15, impersonate="chrome")
             
             if response.status_code == 403:
                 error_msg = "<b>🚫 API Blocked (403)!</b>\nGitHub 可能被偵測為機器人或身份過期。"
@@ -138,11 +143,10 @@ class BookingMonitor:
             capacities = data.get("default", data)
             
             # 收集 API 回傳中所有開放的日期
-            all_open_dates = []
-            for date_str in sorted(capacities.keys()):
-                info = capacities.get(date_str)
-                if isinstance(info, dict) and info.get("status") == "open":
-                    all_open_dates.append(date_str)
+            all_open_dates = [
+                date_str for date_str in sorted(capacities)
+                if isinstance(capacities[date_str], dict) and capacities[date_str].get("status") == "open"
+            ]
 
             available_days = []
             for target_date in self.target_dates:
@@ -161,7 +165,7 @@ class BookingMonitor:
                 "<b>📋 所有可訂位日期:</b>\n" + "\n".join(f"• {d}" for d in all_open_dates)
                 if all_open_dates else "<b>📋 目前沒有任何可訂位日期</b>"
             )
-            booking_link = '<a href="https://inline.app/booking/-NeqTSgDQOAYi30lg4a7:inline-live-3/-OUYVD5L8af9l-fOxBi5">👉 Book Now</a>'
+            booking_link = f'<a href="{BOOKING_URL}">👉 Book Now</a>'
 
             if available_days:
                 msg = (
@@ -181,12 +185,12 @@ class BookingMonitor:
                 return False
                 
         except Exception as e:
-            error_msg = f"<b>❌ Error:</b>\n<code>{str(e)}</code>"
-            self.log(error_msg.replace("<b>", "").replace("</b>", ""))
+            self.log(f"Error: {e}")
             if "403" in str(e):
                 self.send_telegram_notification("<b>🚫 API Blocked (403)!</b>\n連線被拒絕，請檢查身份資訊。")
             else:
-                self.send_telegram_notification(error_msg)
+                # escape 例外內容，避免其中的 < / & 讓 Telegram HTML 解析失敗
+                self.send_telegram_notification(f"<b>❌ Error:</b>\n<code>{html.escape(str(e))}</code>")
             return False
 
 def main():
