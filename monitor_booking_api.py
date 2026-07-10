@@ -58,6 +58,7 @@ class BookingMonitor:
         self.debug_mode = False
         self.state_file = state_file  # 用檔案保存狀態，讓 --once 模式 (如 GitHub Actions) 也能跨執行去重
         self.last_open_dates = self._load_state()  # 上次檢查到的開放日期集合，用來避免重複通知
+        self.blocked_streak = 0  # 連續被擋 (403) 的次數，用於通知去重與退避
 
     def _load_state(self):
         if not self.state_file or not os.path.exists(self.state_file):
@@ -125,14 +126,15 @@ class BookingMonitor:
             response = requests.get(API_URL, headers=self._build_headers(), timeout=15, impersonate="chrome")
             
             if response.status_code == 403:
-                error_msg = "<b>🚫 API Blocked (403)!</b>\nGitHub 可能被偵測為機器人或身份過期。"
                 if self.debug_mode:
                     self.log(f"DEBUG: 403 Body Snippet: {response.text[:500]}")
-                self.log(error_msg.replace("<b>", "").replace("</b>", ""))
-                self.send_telegram_notification(error_msg)
+                self._handle_blocked()
                 return False
-                
+
             response.raise_for_status()
+            if self.blocked_streak:
+                self.send_telegram_notification("<b>✅ 解除封鎖</b>\nAPI 已恢復正常存取。")
+            self.blocked_streak = 0
             data = response.json()
             print(f"API Response Status: {response.status_code}")
             if self.debug_mode:
@@ -187,11 +189,26 @@ class BookingMonitor:
         except Exception as e:
             self.log(f"Error: {e}")
             if "403" in str(e):
-                self.send_telegram_notification("<b>🚫 API Blocked (403)!</b>\n連線被拒絕，請檢查身份資訊。")
+                self._handle_blocked()
             else:
                 # escape 例外內容，避免其中的 < / & 讓 Telegram HTML 解析失敗
                 self.send_telegram_notification(f"<b>❌ Error:</b>\n<code>{html.escape(str(e))}</code>")
             return False
+
+    def _handle_blocked(self):
+        # 連續 403 只通知第一次，避免 loop 模式下轟炸 Telegram
+        self.blocked_streak += 1
+        self.log(f"🚫 API Blocked (403)! (連續第 {self.blocked_streak} 次)")
+        if self.blocked_streak == 1:
+            self.send_telegram_notification(
+                "<b>🚫 API Blocked (403)!</b>\n身份可能過期，請重新抓取 Cookie。封鎖期間將自動退避並暫停重複通知。"
+            )
+
+    def next_delay(self, base_interval):
+        # 被擋時指數退避 (最長 30 分鐘)，降低持續觸發防護而延長封鎖的機率
+        if not self.blocked_streak:
+            return base_interval
+        return min(base_interval * (2 ** self.blocked_streak), 1800)
 
 def main():
     parser = argparse.ArgumentParser(description="Monitor Inline Capacity API for slot availability.")
@@ -238,7 +255,10 @@ def main():
     monitor.log(f"Starting monitor with {args.interval}s interval...")
     while True:
         monitor.check_booking_status()
-        time.sleep(args.interval)
+        delay = monitor.next_delay(args.interval)
+        if delay != args.interval:
+            monitor.log(f"被擋中，退避 {delay}s 後重試...")
+        time.sleep(delay)
 
 if __name__ == "__main__":
     main()
