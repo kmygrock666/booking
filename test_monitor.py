@@ -13,26 +13,50 @@ class TestMonitor(unittest.TestCase):
     @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
     def test_multi_date_detection(self, mock_notify, mock_get, mock_log):
         # Mock Capacity API response with multiple open dates
+        # times 的值是該時段可訂的人數列表，需包含 2 (兩位) 才通知
         mock_response = MagicMock()
         mock_response.status_code = 200
         mock_response.json.return_value = {
             "default": {
-                "2026-03-11": {"status": "open", "times": {"18:00": [], "19:00": []}},
-                "2026-03-12": {"status": "open", "times": {"12:00": []}},
+                "2026-03-11": {"status": "open", "times": {"18:00": [2, 4], "19:00": [5]}},
+                "2026-03-12": {"status": "open", "times": {"12:00": [2]}},
                 "2026-03-13": {"status": "full"}
             }
         }
         mock_get.return_value = mock_response
-        
+
         # Run check
         result = self.monitor.check_booking_status()
-        
+
         # Verify
         self.assertTrue(result)
         mock_notify.assert_called_once()
-        self.assertIn("TARGET DATES OPEN", mock_notify.call_args[0][0])
-        self.assertIn("2026-03-11", mock_notify.call_args[0][0])
-        self.assertIn("2026-03-12", mock_notify.call_args[0][0])
+        msg = mock_notify.call_args[0][0]
+        self.assertIn("TARGET DATES OPEN", msg)
+        self.assertIn("2026-03-11", msg)
+        self.assertIn("2026-03-12", msg)
+        self.assertIn("18:00", msg)
+        # 19:00 只剩 5 位，不應列出
+        self.assertNotIn("19:00", msg)
+
+    @patch('monitor_booking_api.BookingMonitor.log')
+    @patch('curl_cffi.requests.get')
+    @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
+    def test_open_but_no_seats_for_two(self, mock_notify, mock_get, mock_log):
+        # 日期開放但所有時段都沒有 2 位的位子 -> 不通知
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "default": {
+                "2026-03-11": {"status": "open", "times": {"11:30": [], "12:00": [5, 6]}},
+            }
+        }
+        mock_get.return_value = mock_response
+
+        result = self.monitor.check_booking_status()
+
+        self.assertFalse(result)
+        mock_notify.assert_not_called()
 
     @patch('monitor_booking_api.BookingMonitor.log')
     @patch('curl_cffi.requests.get')

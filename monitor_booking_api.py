@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Configuration
-COMPANY_ID = "-NeqTSgDQOAYi30lg4a7:inline-live-3"
+COMPANY_ID = "-NeqTSgDQOAYi30lg4a7%3Ainline-live-3"
 BRANCH_ID = "-OuaB8PT0YWMRAavQhfS"  # 島語-台中漢神洲際店 (舊: -OUYVD5L8af9l-fOxBi5)
 API_URL = f"https://inline.app/api/booking-capacitiesV3?companyId={quote(COMPANY_ID, safe='')}&branchId={BRANCH_ID}"
 BOOKING_URL = f"https://inline.app/booking/{COMPANY_ID}/{BRANCH_ID}"
@@ -47,11 +47,12 @@ DEFAULT_HEADERS = {
 }
 
 class BookingMonitor:
-    def __init__(self, bot_token, chat_id, cookie="", target_dates=None, user_agent=None, fingerprint=None, session_id=None, state_file=None):
+    def __init__(self, bot_token, chat_id, cookie="", target_dates=None, user_agent=None, fingerprint=None, session_id=None, state_file=None, party_size=2):
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.cookie = cookie
         self.target_dates = target_dates or ["2026-08-15"]
+        self.party_size = party_size  # 只在時段可訂這個人數時才通知
         self.user_agent = user_agent
         self.fingerprint = fingerprint
         self.session_id = session_id
@@ -119,6 +120,14 @@ class BookingMonitor:
             print(json.dumps(debug_headers, indent=2))
         return headers
 
+    def _bookable_times(self, info):
+        # times 的值是該時段可訂的人數列表，例如 {"12:00": [5, 6]} 表示只開放 5、6 位
+        # 回傳可訂 party_size 位的時段清單；日期未開放或沒位子時回傳空清單
+        if not isinstance(info, dict) or info.get("status") != "open":
+            return []
+        times = info.get("times") or {}
+        return sorted(t for t, sizes in times.items() if self.party_size in (sizes or []))
+
     def check_booking_status(self):
         self.log(f"Checking booking status for dates: {', '.join(self.target_dates)}")
         try:
@@ -144,19 +153,17 @@ class BookingMonitor:
             # The API returns data nested under a 'default' key
             capacities = data.get("default", data)
             
-            # 收集 API 回傳中所有開放的日期
+            # 收集 API 回傳中所有開放、且有 party_size 位子的日期
             all_open_dates = [
                 date_str for date_str in sorted(capacities)
-                if isinstance(capacities[date_str], dict) and capacities[date_str].get("status") == "open"
+                if self._bookable_times(capacities[date_str])
             ]
 
             available_days = []
             for target_date in self.target_dates:
-                info = capacities.get(target_date)
-                if info and info.get("status") == "open":
-                    times_list = list(info.get("times", {}).keys())
-                    times_str = ", ".join(times_list) if times_list else "All Times"
-                    available_days.append(f"📅 <b>{target_date}</b>\nSlots: {times_str}")
+                times_list = self._bookable_times(capacities.get(target_date))
+                if times_list:
+                    available_days.append(f"📅 <b>{target_date}</b>\nSlots ({self.party_size}位): {', '.join(times_list)}")
 
             open_set = set(all_open_dates)
             open_changed = self.last_open_dates is None or open_set != self.last_open_dates
@@ -164,8 +171,8 @@ class BookingMonitor:
             self._save_state()
 
             all_open_section = (
-                "<b>📋 所有可訂位日期:</b>\n" + "\n".join(f"• {d}" for d in all_open_dates)
-                if all_open_dates else "<b>📋 目前沒有任何可訂位日期</b>"
+                f"<b>📋 所有可訂 {self.party_size} 位的日期:</b>\n" + "\n".join(f"• {d}" for d in all_open_dates)
+                if all_open_dates else f"<b>📋 目前沒有可訂 {self.party_size} 位的日期</b>"
             )
             booking_link = f'<a href="{BOOKING_URL}">👉 Book Now</a>'
 
@@ -217,6 +224,7 @@ def main():
     parser.add_argument("--heartbeat", action="store_true", help="Send a heartbeat message and exit.")
     parser.add_argument("--interval", type=int, default=60, help="Check interval in seconds (default: 60).")
     parser.add_argument("--dates", type=str, help="Comma-separated target dates (overrides .env).")
+    parser.add_argument("--party-size", type=int, default=int(os.getenv("PARTY_SIZE", "2")), help="Notify only when a slot can seat this many people (default: 2).")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode to show raw API response.")
     parser.add_argument("--state-file", type=str, default=os.getenv("STATE_FILE"), help="Path to a JSON file for persisting seen open dates across runs (for --once mode).")
     
@@ -237,7 +245,7 @@ def main():
     target_dates_str = args.dates or os.getenv("TARGET_DATES", "2026-08-15")
     target_dates = [d.strip() for d in target_dates_str.split(",") if d.strip()]
     
-    monitor = BookingMonitor(bot_token, chat_id, cookie, target_dates, user_agent, fingerprint, session_id, state_file=args.state_file)
+    monitor = BookingMonitor(bot_token, chat_id, cookie, target_dates, user_agent, fingerprint, session_id, state_file=args.state_file, party_size=args.party_size)
     monitor.debug_mode = args.debug
     
     if args.test_notify:
