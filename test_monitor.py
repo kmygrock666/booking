@@ -97,6 +97,41 @@ class TestMonitor(unittest.TestCase):
         mock_notify.assert_called_once()
         self.assertIn("API Blocked", mock_notify.call_args[0][0])
 
+    @patch('monitor_booking_api.BookingMonitor.log')
+    @patch('curl_cffi.requests.get')
+    @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
+    def test_target_notification_dedup(self, mock_notify, mock_get, mock_log):
+        # 目標日期持續開放且時段不變 -> 只響一次；時段變化 -> 再通知
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "default": {"2026-03-11": {"status": "open", "times": {"18:00": [2]}}}
+        }
+        mock_get.return_value = mock_response
+
+        self.assertTrue(self.monitor.check_booking_status())
+        self.assertTrue(self.monitor.check_booking_status())
+        self.assertEqual(mock_notify.call_count, 1)
+
+        mock_response.json.return_value = {
+            "default": {"2026-03-11": {"status": "open", "times": {"18:00": [2], "19:00": [2]}}}
+        }
+        self.assertTrue(self.monitor.check_booking_status())
+        self.assertEqual(mock_notify.call_count, 2)
+
+    @patch('monitor_booking_api.BookingMonitor.log')
+    @patch('curl_cffi.requests.get')
+    @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
+    def test_error_notification_dedup_and_silent(self, mock_notify, mock_get, mock_log):
+        # 連續相同錯誤只通知一次，且為靜音推送
+        mock_get.side_effect = RuntimeError("boom")
+
+        self.assertFalse(self.monitor.check_booking_status())
+        self.assertFalse(self.monitor.check_booking_status())
+
+        mock_notify.assert_called_once()
+        self.assertTrue(mock_notify.call_args.kwargs.get("silent"))
+
     @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
     def test_heartbeat(self, mock_notify):
         # Run heartbeat logic from main

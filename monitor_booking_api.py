@@ -58,25 +58,35 @@ class BookingMonitor:
         self.session_id = session_id
         self.debug_mode = False
         self.state_file = state_file  # 用檔案保存狀態，讓 --once 模式 (如 GitHub Actions) 也能跨執行去重
-        self.last_open_dates = self._load_state()  # 上次檢查到的開放日期集合，用來避免重複通知
+        state = self._load_state()
+        self.last_open_dates = state.get("open_dates")  # 上次檢查到的開放日期集合 (None 表示尚無狀態)
+        self.notified_target_slots = state.get("target_slots") or {}  # 上次響鈴通知過的目標日期時段，內容沒變就不再響
         self.blocked_streak = 0  # 連續被擋 (403) 的次數，用於通知去重與退避
+        self.last_error = None  # 上次通知過的錯誤訊息，連續相同錯誤只通知一次
 
     def _load_state(self):
         if not self.state_file or not os.path.exists(self.state_file):
-            return None
+            return {}
         try:
             with open(self.state_file) as f:
-                return set(json.load(f).get("open_dates", []))
+                raw = json.load(f)
+            state = {"target_slots": raw.get("target_slots") or {}}
+            if "open_dates" in raw:
+                state["open_dates"] = set(raw["open_dates"])
+            return state
         except Exception as e:
             print(f"Warning: failed to load state file: {e}")
-            return None
+            return {}
 
     def _save_state(self):
         if not self.state_file:
             return
         try:
             with open(self.state_file, "w") as f:
-                json.dump({"open_dates": sorted(self.last_open_dates or [])}, f)
+                json.dump({
+                    "open_dates": sorted(self.last_open_dates or []),
+                    "target_slots": self.notified_target_slots,
+                }, f)
         except Exception as e:
             print(f"Warning: failed to save state file: {e}")
 
@@ -88,13 +98,15 @@ class BookingMonitor:
             return "*****"
         return f"{s[:visible]}...{s[-visible:]}"
 
-    def send_telegram_notification(self, message):
-        self.log("Sending Telegram notification...")
+    def send_telegram_notification(self, message, silent=False):
+        # silent=True 為靜音推送 (手機不響鈴不震動)，用於維運類訊息，讓響鈴專屬於真正的空位通知
+        self.log(f"Sending Telegram notification{' (silent)' if silent else ''}...")
         url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
         payload = {
             "chat_id": self.chat_id,
             "text": message,
-            "parse_mode": "HTML"
+            "parse_mode": "HTML",
+            "disable_notification": silent,
         }
         try:
             response = requests.post(url, json=payload, timeout=10)
@@ -142,8 +154,9 @@ class BookingMonitor:
 
             response.raise_for_status()
             if self.blocked_streak:
-                self.send_telegram_notification("<b>✅ 解除封鎖</b>\nAPI 已恢復正常存取。")
+                self.send_telegram_notification("<b>✅ 解除封鎖</b>\nAPI 已恢復正常存取。", silent=True)
             self.blocked_streak = 0
+            self.last_error = None
             data = response.json()
             print(f"API Response Status: {response.status_code}")
             if self.debug_mode:
@@ -159,16 +172,19 @@ class BookingMonitor:
                 if self._bookable_times(capacities[date_str])
             ]
 
-            available_days = []
+            target_slots = {}
             for target_date in self.target_dates:
                 times_list = self._bookable_times(capacities.get(target_date))
                 if times_list:
-                    available_days.append(f"📅 <b>{target_date}</b>\nSlots ({self.party_size}位): {', '.join(times_list)}")
+                    target_slots[target_date] = times_list
+            available_days = [
+                f"📅 <b>{d}</b>\nSlots ({self.party_size}位): {', '.join(t)}"
+                for d, t in sorted(target_slots.items())
+            ]
 
             open_set = set(all_open_dates)
             open_changed = self.last_open_dates is None or open_set != self.last_open_dates
             self.last_open_dates = open_set
-            self._save_state()
 
             all_open_section = (
                 f"<b>📋 所有可訂 {self.party_size} 位的日期:</b>\n" + "\n".join(f"• {d}" for d in all_open_dates)
@@ -177,29 +193,40 @@ class BookingMonitor:
             booking_link = f'<a href="{BOOKING_URL}">👉 Book Now</a>'
 
             if available_days:
-                msg = (
-                    f"<b>🎯 TARGET DATES OPEN!</b>\n\n"
-                    + "\n\n".join(available_days) + "\n\n"
-                    + all_open_section + "\n\n"
-                    + booking_link
-                )
                 self.log(f"Found {len(available_days)} target open days! (all open: {len(all_open_dates)})")
-                self.send_telegram_notification(msg)
+                # 時段內容和上次響鈴通知相同就不再響，避免持續開放期間每輪都轟炸
+                if target_slots != self.notified_target_slots:
+                    msg = (
+                        f"<b>🎯 TARGET DATES OPEN!</b>\n\n"
+                        + "\n\n".join(available_days) + "\n\n"
+                        + all_open_section + "\n\n"
+                        + booking_link
+                    )
+                    self.send_telegram_notification(msg)
+                else:
+                    self.log("Target slots unchanged since last notification; skipping.")
+                self.notified_target_slots = target_slots
+                self._save_state()
                 return True
             else:
                 self.log(f"No target dates available. All open dates: {', '.join(all_open_dates) or 'none'}")
                 # 開放日期清單有變化時才通知，避免重複轟炸
                 if open_changed and all_open_dates:
                     self.send_telegram_notification(all_open_section + "\n\n" + booking_link)
+                self.notified_target_slots = {}
+                self._save_state()
                 return False
                 
         except Exception as e:
             self.log(f"Error: {e}")
             if "403" in str(e):
                 self._handle_blocked()
+            elif str(e) != self.last_error:
+                # 連續相同錯誤只通知第一次；escape 例外內容，避免其中的 < / & 讓 Telegram HTML 解析失敗
+                self.send_telegram_notification(f"<b>❌ Error:</b>\n<code>{html.escape(str(e))}</code>", silent=True)
+                self.last_error = str(e)
             else:
-                # escape 例外內容，避免其中的 < / & 讓 Telegram HTML 解析失敗
-                self.send_telegram_notification(f"<b>❌ Error:</b>\n<code>{html.escape(str(e))}</code>")
+                self.log("Same error as last notification; skipping.")
             return False
 
     def _handle_blocked(self):
@@ -208,7 +235,8 @@ class BookingMonitor:
         self.log(f"🚫 API Blocked (403)! (連續第 {self.blocked_streak} 次)")
         if self.blocked_streak == 1:
             self.send_telegram_notification(
-                "<b>🚫 API Blocked (403)!</b>\n身份可能過期，請重新抓取 Cookie。封鎖期間將自動退避並暫停重複通知。"
+                "<b>🚫 API Blocked (403)!</b>\n身份可能過期，請重新抓取 Cookie。封鎖期間將自動退避並暫停重複通知。",
+                silent=True,
             )
 
     def next_delay(self, base_interval):
