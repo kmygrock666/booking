@@ -32,6 +32,9 @@ def get_header_value(env_name, hardcoded_val, default=""):
         return hardcoded_val or default
     return os.getenv(env_name) or hardcoded_val or default
 
+# 連續 403 達到此次數才視為真的被封鎖並通知；偶發的單次 403 (間歇性挑戰) 只記 log
+BLOCK_NOTIFY_THRESHOLD = 3
+
 # Advanced Headers for Bot Protection (from User's Curl)
 DEFAULT_HEADERS = {
     'accept': '*/*',
@@ -61,8 +64,8 @@ class BookingMonitor:
         state = self._load_state()
         self.last_open_dates = state.get("open_dates")  # 上次檢查到的開放日期集合 (None 表示尚無狀態)
         self.notified_target_slots = state.get("target_slots") or {}  # 上次響鈴通知過的目標日期時段，內容沒變就不再響
-        # 連續被擋 (403) 的次數，用於通知去重與退避；已通知過封鎖則從 1 起算，重啟後不再重發
-        self.blocked_streak = 1 if state.get("blocked_notified") else 0
+        # 連續被擋 (403) 的次數，用於通知去重與退避；已通知過封鎖則直接從門檻起算，重啟後不再重發
+        self.blocked_streak = BLOCK_NOTIFY_THRESHOLD if state.get("blocked_notified") else 0
         self.last_error = None  # 上次通知過的錯誤訊息，連續相同錯誤只通知一次
 
     def _load_state(self):
@@ -90,7 +93,7 @@ class BookingMonitor:
                 json.dump({
                     "open_dates": sorted(self.last_open_dates or []),
                     "target_slots": self.notified_target_slots,
-                    "blocked_notified": self.blocked_streak > 0,
+                    "blocked_notified": self.blocked_streak >= BLOCK_NOTIFY_THRESHOLD,
                 }, f)
         except Exception as e:
             print(f"Warning: failed to save state file: {e}")
@@ -158,8 +161,11 @@ class BookingMonitor:
                 return False
 
             response.raise_for_status()
-            if self.blocked_streak:
+            if self.blocked_streak >= BLOCK_NOTIFY_THRESHOLD:
+                # 只在真的通知過封鎖時才發解除訊息；偶發 403 恢復時保持安靜
                 self.send_telegram_notification("<b>✅ 解除封鎖</b>\nAPI 已恢復正常存取。", silent=True)
+            elif self.blocked_streak:
+                self.log(f"Recovered after {self.blocked_streak} transient 403(s).")
             self.blocked_streak = 0
             self.last_error = None
             data = response.json()
@@ -235,13 +241,13 @@ class BookingMonitor:
             return False
 
     def _handle_blocked(self):
-        # 連續 403 只通知第一次，避免 loop 模式下轟炸 Telegram
+        # 連續 403 達門檻才通知一次；偶發的間歇性 403 只記 log，避免「被擋/解除」成對刷屏
         self.blocked_streak += 1
         self._save_state()  # 持久化封鎖狀態，重啟後不重發通知
         self.log(f"🚫 API Blocked (403)! (連續第 {self.blocked_streak} 次)")
-        if self.blocked_streak == 1:
+        if self.blocked_streak == BLOCK_NOTIFY_THRESHOLD:
             self.send_telegram_notification(
-                "<b>🚫 API Blocked (403)!</b>\n身份可能過期，請重新抓取 Cookie。封鎖期間將自動退避並暫停重複通知。",
+                "<b>🚫 API Blocked (403)!</b>\n連續多次被擋，身份可能過期，請重新抓取 Cookie。封鎖期間將自動退避並暫停重複通知。",
                 silent=True,
             )
 

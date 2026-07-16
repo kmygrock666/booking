@@ -84,18 +84,38 @@ class TestMonitor(unittest.TestCase):
     @patch('curl_cffi.requests.get')
     @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
     def test_403_blocking_notification(self, mock_notify, mock_get, mock_log):
-        # Mock 403 Forbidden
+        # 連續 403 達門檻 (3 次) 才通知一次
         mock_response = MagicMock()
         mock_response.status_code = 403
         mock_get.return_value = mock_response
-        
-        # Run check
-        result = self.monitor.check_booking_status()
-        
-        # Verify
-        self.assertFalse(result)
+
+        self.assertFalse(self.monitor.check_booking_status())
+        self.assertFalse(self.monitor.check_booking_status())
+        mock_notify.assert_not_called()  # 未達門檻：不通知
+
+        self.assertFalse(self.monitor.check_booking_status())
         mock_notify.assert_called_once()
         self.assertIn("API Blocked", mock_notify.call_args[0][0])
+
+        self.assertFalse(self.monitor.check_booking_status())
+        mock_notify.assert_called_once()  # 超過門檻後不重發
+
+    @patch('monitor_booking_api.BookingMonitor.log')
+    @patch('curl_cffi.requests.get')
+    @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
+    def test_transient_403_stays_quiet(self, mock_notify, mock_get, mock_log):
+        # 間歇性 403 (403 -> 200 交替) 不應發出任何被擋/解除通知
+        blocked = MagicMock()
+        blocked.status_code = 403
+        ok = MagicMock()
+        ok.status_code = 200
+        ok.json.return_value = {"default": {"2026-03-01": {"status": "full"}}}
+        mock_get.side_effect = [blocked, ok, blocked, blocked, ok]
+
+        for _ in range(5):
+            self.monitor.check_booking_status()
+
+        mock_notify.assert_not_called()
 
     @patch('monitor_booking_api.BookingMonitor.log')
     @patch('curl_cffi.requests.get')
@@ -145,8 +165,9 @@ class TestMonitor(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             state_file = os.path.join(tmp, "state.json")
             m1 = BookingMonitor("t", "c", state_file=state_file)
-            m1.check_booking_status()
-            mock_notify.assert_called_once()  # 第一次封鎖：通知
+            for _ in range(3):  # 連續 403 達門檻
+                m1.check_booking_status()
+            mock_notify.assert_called_once()  # 達門檻：通知一次
 
             m2 = BookingMonitor("t", "c", state_file=state_file)  # 模擬重啟
             m2.check_booking_status()
