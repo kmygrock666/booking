@@ -10,3 +10,6 @@ venv/
 
 # OS
 .DS_Store
+
+# Monitor state
+.booking_state.json

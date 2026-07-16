@@ -61,7 +61,8 @@ class BookingMonitor:
         state = self._load_state()
         self.last_open_dates = state.get("open_dates")  # 上次檢查到的開放日期集合 (None 表示尚無狀態)
         self.notified_target_slots = state.get("target_slots") or {}  # 上次響鈴通知過的目標日期時段，內容沒變就不再響
-        self.blocked_streak = 0  # 連續被擋 (403) 的次數，用於通知去重與退避
+        # 連續被擋 (403) 的次數，用於通知去重與退避；已通知過封鎖則從 1 起算，重啟後不再重發
+        self.blocked_streak = 1 if state.get("blocked_notified") else 0
         self.last_error = None  # 上次通知過的錯誤訊息，連續相同錯誤只通知一次
 
     def _load_state(self):
@@ -70,7 +71,10 @@ class BookingMonitor:
         try:
             with open(self.state_file) as f:
                 raw = json.load(f)
-            state = {"target_slots": raw.get("target_slots") or {}}
+            state = {
+                "target_slots": raw.get("target_slots") or {},
+                "blocked_notified": raw.get("blocked_notified", False),
+            }
             if "open_dates" in raw:
                 state["open_dates"] = set(raw["open_dates"])
             return state
@@ -86,6 +90,7 @@ class BookingMonitor:
                 json.dump({
                     "open_dates": sorted(self.last_open_dates or []),
                     "target_slots": self.notified_target_slots,
+                    "blocked_notified": self.blocked_streak > 0,
                 }, f)
         except Exception as e:
             print(f"Warning: failed to save state file: {e}")
@@ -232,6 +237,7 @@ class BookingMonitor:
     def _handle_blocked(self):
         # 連續 403 只通知第一次，避免 loop 模式下轟炸 Telegram
         self.blocked_streak += 1
+        self._save_state()  # 持久化封鎖狀態，重啟後不重發通知
         self.log(f"🚫 API Blocked (403)! (連續第 {self.blocked_streak} 次)")
         if self.blocked_streak == 1:
             self.send_telegram_notification(
@@ -254,7 +260,7 @@ def main():
     parser.add_argument("--dates", type=str, help="Comma-separated target dates (overrides .env).")
     parser.add_argument("--party-size", type=int, default=int(os.getenv("PARTY_SIZE", "2")), help="Notify only when a slot can seat this many people (default: 2).")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode to show raw API response.")
-    parser.add_argument("--state-file", type=str, default=os.getenv("STATE_FILE"), help="Path to a JSON file for persisting seen open dates across runs (for --once mode).")
+    parser.add_argument("--state-file", type=str, default=os.getenv("STATE_FILE") or ".booking_state.json", help="Path to a JSON file for persisting notification state across runs/restarts.")
     
     args = parser.parse_args()
     

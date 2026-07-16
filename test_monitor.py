@@ -132,6 +132,26 @@ class TestMonitor(unittest.TestCase):
         mock_notify.assert_called_once()
         self.assertTrue(mock_notify.call_args.kwargs.get("silent"))
 
+    @patch('monitor_booking_api.BookingMonitor.log')
+    @patch('curl_cffi.requests.get')
+    @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
+    def test_blocked_notification_survives_restart(self, mock_notify, mock_get, mock_log):
+        # 封鎖期間重啟 (新的 monitor 實例 + 同一狀態檔) 不應重發 403 通知
+        import tempfile, os
+        mock_response = MagicMock()
+        mock_response.status_code = 403
+        mock_get.return_value = mock_response
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_file = os.path.join(tmp, "state.json")
+            m1 = BookingMonitor("t", "c", state_file=state_file)
+            m1.check_booking_status()
+            mock_notify.assert_called_once()  # 第一次封鎖：通知
+
+            m2 = BookingMonitor("t", "c", state_file=state_file)  # 模擬重啟
+            m2.check_booking_status()
+            mock_notify.assert_called_once()  # 重啟後仍被擋：不重發
+
     @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
     def test_heartbeat(self, mock_notify):
         # Run heartbeat logic from main
