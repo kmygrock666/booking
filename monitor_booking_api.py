@@ -21,7 +21,7 @@ BOOKING_URL = f"https://inline.app/booking/{COMPANY_ID}/{BRANCH_ID}"
 # --- 這裡可直接貼上您的資訊 (也可透過 .env 或 GitHub Secrets 設定) ---
 # [重要] 如果您在 GitHub Actions 遇到 403，請將資訊填入下方並將 STRICT_HARDCODE 設為 True
 STRICT_HARDCODE = True # 設為 True 則完全忽略環境變數，強制使用下方填寫的值
-HARDCODED_COOKIE = "_pxhd=2d4eab4365748ed1b4e9ff9bdac561a12fa2025ca6a8243a0e777bc3ba1b4a3a:cc3babde-768e-11f1-b569-6bb2d43e9ebc; _gcl_au=1.1.1433409852.1783049111; _ga=GA1.1.1374540555.1783049112; _fbp=fb.1.1783049111569.926599769444611741; _pxvid=cc3babde-768e-11f1-b569-6bb2d43e9ebc; _clck=1ccv9yu%5E2%5Eg7m%5E0%5E2375; mp_c153a2e7d8ab430d4f6087e52e535ee8_mixpanel=%7B%22distinct_id%22%3A%22%24device%3A501a0c71-8d09-481f-9725-f148ce54e6c4%22%2C%22%24device_id%22%3A%22501a0c71-8d09-481f-9725-f148ce54e6c4%22%2C%22%24initial_referrer%22%3A%22%24direct%22%2C%22%24initial_referring_domain%22%3A%22%24direct%22%2C%22__mps%22%3A%7B%7D%2C%22__mpso%22%3A%7B%22%24initial_referrer%22%3A%22%24direct%22%2C%22%24initial_referring_domain%22%3A%22%24direct%22%7D%2C%22__mpus%22%3A%7B%7D%2C%22__mpa%22%3A%7B%7D%2C%22__mpu%22%3A%7B%7D%2C%22__mpr%22%3A%5B%5D%2C%22__mpap%22%3A%5B%5D%7D; cf_clearance=6Y8SkRnfyawDAlslqu75GgzeeGXTnQKalA46uXNBzTs-1783695962-1.2.1.1-3aU7r1LZ6JVDQbouHgTEfuDdmwpUD8_j2B6yz0Wvek4G_YYGcndH0bQYRiF_o3swSqGbzRvCR4wvtSRSUyR02mRMluVoJ7xE_CJ1jwgRmcZofnRlhTniwbyYoL46z999JRbkcCpsQ.BwdrqSAt02sAH29hKXaEa4ZvEfHdfmHW_mirD5eWq_M..YUxU6or.kSzjSv5ttXfxn48Vg8JROcebH9O077NFZ59HWc0eTPVHLHjIlEpAtwiY9eikzfks8YkQJZY96qBSp0S_oX12WZTWpL_wyHgkb4lSLNZU7AfPrrOOOG48cIRrRfQ0RFEqVFWjufa1yxrBI.NMT6pmpsQ; _ga_6EKTQH8DYH=GS2.1.s1783695962$o8$g1$t1783695963$j59$l0$h0; _ga_NJJ9CTT701=GS2.1.s1783695962$o8$g1$t1783695963$j59$l0$h0; _ga_LQ2HBGK93X=GS2.1.s1783695962$o8$g1$t1783695963$j59$l0$h2070140270; _clsk=1phizwz%5E1783695963605%5E2%5E0%5Ej.clarity.ms%2Fcollect; _px3=03e88fcaf2341f08a95d3ef99844beda8b32c6bb23b60bf93e82284507f1b289:Q2oNx47wMjSTGgGa2fRbaDAGEUWRHA8WAjXken2WWahKtpmkKCfyymrEitIF9Asao4zLobUiytT0oH1UETJBXg==:1000:45DulcQo6MUyVpwRFW8JCsIVpo53y3SymLR9u2bICui1+57LAVM6/pkY56sD5jkHu53OLjqef7P/YH791WGfLcXTYxmIID0elO9F7YA1HIaVr5lIdzWaM/KdrD/izUt5lZVQbLiWxGEPGN1wui9wXEf+f3ivC7FixHAy1o9TzpTEFwAeAfpDt3udEkPIWyibsVqJrHQKMwFY/HVDUb+ZDZvz2qlaCcrvV4lUuv4H2hyabv3DrDujvbbYX9Ceflqth6o9lKIBi9v4N/Nuco5Pp/0I8zwOR3v5ZsoetF5FOp/0xntlOGUJxgNExncjBzC/MHZJOdVs7Ym7rQiDR4aitPPbSfNxr8lxj5yrfNgPs7TWw9IXidEsKGc9oSfdD+VtacxQ8OZ+IcWZ5h0AMeXfs/fLpyTbhsgItruY2OUCCT+2bIzvoKclF1y4M0hhyGrB4gvnzdwzuHpnz3PhkZJOWdEyfQLLNUxneUaviitJVpl1jF7AINiXjGJM6P2Jcx5gcD/J7Tf2Wv21nMQjmCRS9g==; pxcts=HXNRmaHvUAzGLNWKUGeBMyEDTf9xbLtry2rY30FSZ/g=:rUUrHdR1m67PfvoaAqs6Cv1JevWNi5cx7fh1j-2KqMi3fr-AYPPBkQV2R1hlW-Wxc4GHKM55zLkjh9f/Ie5AjVxza7zdKgqksZQ4ty8OVcd8I6D5YdDA1uZs/J3ABVjPlCzJGYteh1v8BoERZ2-E8OOrj7IfZj8dnhooh1/0vbz1ZAipq997SS08rXpUxJ-Q"
+HARDCODED_COOKIE = "_pxhd=2d4eab4365748ed1b4e9ff9bdac561a12fa2025ca6a8243a0e777bc3ba1b4a3a:cc3babde-768e-11f1-b569-6bb2d43e9ebc; _ga=GA1.1.1374540555.1783049112; _fbp=fb.1.1783049111569.926599769444611741; _pxvid=cc3babde-768e-11f1-b569-6bb2d43e9ebc; _clck=1ccv9yu%5E2%5Eg7u%5E0%5E2375; cf_clearance=bj3QWMWgMOC_lWVto4XqlK9aIovTlQh6tC13Ks2JBW4-1784380521-1.2.1.1-9kIS4oxdOV489tLX_ROjUgzLJ1t2zlkITxcDCq5LUVzVPoK_cXOr7RTyLo1BA8evo1CrcsXF.DdvQ_YmkG.dY17SLxXFpdxOM0WROETm3zPOkHhHtOeFFCC1tx0VSRBypf1t9s9FDpNNL4kLFYGrkmXCUp3SrfetKxBo0IyMNDweCtRZYsr3RSTxSde7D3YKMyJA.29h.ZOAr7XttndrevHMJVG7FB.SuVB_TG.vXntEr9T3XuHzCIXpBoGZHSbfIKB9U2VEYHMBLIOnyOepMbpadLijfNGgUwXOKVHZHzTIHzNaglP9h8zWHC4DbkmxVC8KSbQjK9nqzSlQmfPJXA; _clsk=xnjlvi%5E1784380522651%5E2%5E1%5Ej.clarity.ms%2Fcollect; _px3=f52f1986faa88fe0020ad37b211a83c77c5f83e14c40c4655bc5e00844bf1b5f:JEDELZAkBnnxR8JtjoYY8jsJPUm+PbQvaQsXRmfkmlyj9IeWwIk+qJ9pubKzYHpTFle0r+Z/UWN6qXEGjJAPFg==:1000:Ml0srSeqfR0LMYgIUSAy2olTV8QmGQNkjEFJq4MHKtzDfaIznvShQ2Gu1RggMdZLTW/RAIpTzErqpzMLSYQZnUhqYnUU1WeaJEm7K2paE24CvwqlsxMS++XPrwUmT/7VYjveF9V7qa7TxiWjTsMaq3rCGtiPSLVE2qGw4+CCCt574AflZhO1HgzS6Mfylj1boxIeVhVIgcrw0SE2FtmGRIpSvHFMmOWM2pAFbZmjVGBZ6/tDTbpUxR/z/zsa+v8nIKRTrduAEQddUDMPkB18/KhCtUJP2SvnDz8hp034NxZOvNw/sIDwTSf6w6Ky71FQQlnBhUcsH9q04vHMXTY8SEH07QtXuHZNJ58wp1B3ccrWe0Zr1hWc2mHWqyL1adN+h6yCcOViY20nlI2rVV3S7lJxQQYOPOlVgFnTsg+E1/WJbfSWH7lVHejYsvGfh1iZ3j5b0OH3PeV0rUFW38os3V8F5UfH4ejnuEWNg7u7sSu00sF8AdZXeH6vE2xT5+Ch; mp_c153a2e7d8ab430d4f6087e52e535ee8_mixpanel=%7B%22distinct_id%22%3A%22%24device%3A501a0c71-8d09-481f-9725-f148ce54e6c4%22%2C%22%24device_id%22%3A%22501a0c71-8d09-481f-9725-f148ce54e6c4%22%2C%22%24initial_referrer%22%3A%22%24direct%22%2C%22%24initial_referring_domain%22%3A%22%24direct%22%2C%22__mps%22%3A%7B%7D%2C%22__mpso%22%3A%7B%22%24initial_referrer%22%3A%22%24direct%22%2C%22%24initial_referring_domain%22%3A%22%24direct%22%7D%2C%22__mpus%22%3A%7B%7D%2C%22__mpa%22%3A%7B%7D%2C%22__mpu%22%3A%7B%7D%2C%22__mpr%22%3A%5B%5D%2C%22__mpap%22%3A%5B%5D%7D; pxcts=g0If5HnOjNZ/va7TN1XK-kcLr255akqUcIZZgg3wYC0=:G7rI3GZtXmO0ZR5TSTQIvuyGVg7JHvAdPPS6-5EmXINPW33spUE9r7l9VS/aOQZgLRcv8jsSYbYiSOjMJA8HoEaGv/LYYGuDMu1l86FSMITeQxjU4ZrFX6-xapJpAXeGPj/7ifzn9Mjho7Jryz6-5fA1PPOVkaTcg/EaUOEEUPgPE-nhaJexT8LldYx0GTMB; _ga_6EKTQH8DYH=GS2.1.s1784380521$o15$g1$t1784380550$j31$l0$h0; _ga_NJJ9CTT701=GS2.1.s1784380521$o15$g1$t1784380550$j31$l0$h0; _ga_LQ2HBGK93X=GS2.1.s1784380521$o15$g1$t1784380550$j31$l0$h685808772; _gcl_au=1.1.1433409852.1783049111.-.-.1784304504.2131055413.1784304504.1784380550"
 HARDCODED_USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/149.0.0.0 Safari/537.36"
 HARDCODED_FINGERPRINT = "cbc33eeaf2599371bbe02b27aa3f9c6c"
 HARDCODED_SESSION_ID = "97ac085d-0786-493f-8fcc-03b9d8ecef3b"
@@ -202,6 +202,8 @@ class BookingMonitor:
                 if all_open_dates else f"<b>📋 目前沒有可訂 {self.party_size} 位的日期</b>"
             )
             booking_link = f'<a href="{BOOKING_URL}">👉 Book Now</a>'
+            # 附上快照時間並提醒：這是抓取當下的狀態，位子可能在你打開前就被搶走
+            snapshot_note = f'⏱ 抓取時間 {datetime.now():%m-%d %H:%M:%S}（狀態為當下快照，位子可能已被搶，請儘速確認）'
 
             if available_days:
                 self.log(f"Found {len(available_days)} target open days! (all open: {len(all_open_dates)})")
@@ -211,7 +213,8 @@ class BookingMonitor:
                         f"<b>🎯 TARGET DATES OPEN!</b>\n\n"
                         + "\n\n".join(available_days) + "\n\n"
                         + all_open_section + "\n\n"
-                        + booking_link
+                        + booking_link + "\n\n"
+                        + snapshot_note
                     )
                     self.send_telegram_notification(msg)
                 else:
@@ -223,7 +226,7 @@ class BookingMonitor:
                 self.log(f"No target dates available. All open dates: {', '.join(all_open_dates) or 'none'}")
                 # 開放日期清單有變化時才通知，避免重複轟炸
                 if open_changed and all_open_dates:
-                    self.send_telegram_notification(all_open_section + "\n\n" + booking_link)
+                    self.send_telegram_notification(all_open_section + "\n\n" + booking_link + "\n\n" + snapshot_note)
                 self.notified_target_slots = {}
                 self._save_state()
                 return False
