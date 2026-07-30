@@ -50,12 +50,13 @@ DEFAULT_HEADERS = {
 }
 
 class BookingMonitor:
-    def __init__(self, bot_token, chat_id, cookie="", target_dates=None, user_agent=None, fingerprint=None, session_id=None, state_file=None, party_size=2):
+    def __init__(self, bot_token, chat_id, cookie="", target_dates=None, user_agent=None, fingerprint=None, session_id=None, state_file=None, party_size=2, latest_time=None):
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.cookie = cookie
-        self.target_dates = target_dates or ["2026-08-15"]
+        self.target_dates = target_dates or ["2026-10-09", "2026-10-10", "2026-10-11"]
         self.party_size = party_size  # 只在時段可訂這個人數時才通知
+        self.latest_time = latest_time  # 只通知早於此時間的時段 (HH:MM，如 "15:00" 代表只要午餐)，None 表示不限
         self.user_agent = user_agent
         self.fingerprint = fingerprint
         self.session_id = session_id
@@ -146,7 +147,12 @@ class BookingMonitor:
         if not isinstance(info, dict) or info.get("status") != "open":
             return []
         times = info.get("times") or {}
-        return sorted(t for t, sizes in times.items() if self.party_size in (sizes or []))
+        # 時段字串為零填充 HH:MM，字典序即時間先後，可直接比較篩出午餐/晚餐
+        return sorted(
+            t for t, sizes in times.items()
+            if self.party_size in (sizes or [])
+            and (self.latest_time is None or t < self.latest_time)
+        )
 
     def check_booking_status(self):
         self.log(f"Checking booking status for dates: {', '.join(self.target_dates)}")
@@ -267,7 +273,8 @@ def main():
     parser.add_argument("--heartbeat", action="store_true", help="Send a heartbeat message and exit.")
     parser.add_argument("--interval", type=int, default=60, help="Check interval in seconds (default: 60).")
     parser.add_argument("--dates", type=str, help="Comma-separated target dates (overrides .env).")
-    parser.add_argument("--party-size", type=int, default=int(os.getenv("PARTY_SIZE", "2")), help="Notify only when a slot can seat this many people (default: 2).")
+    parser.add_argument("--party-size", type=int, default=int(os.getenv("PARTY_SIZE", "4")), help="Notify only when a slot can seat this many people (default: 4).")
+    parser.add_argument("--latest-time", type=str, default=os.getenv("LATEST_TIME", "15:00"), help="Only notify for slots earlier than this HH:MM (default: 15:00 for lunch; set to 24:00 for all day).")
     parser.add_argument("--debug", action="store_true", help="Enable debug mode to show raw API response.")
     parser.add_argument("--state-file", type=str, default=os.getenv("STATE_FILE") or ".booking_state.json", help="Path to a JSON file for persisting notification state across runs/restarts.")
     
@@ -285,10 +292,10 @@ def main():
     fingerprint = get_header_value("X_CLIENT_FINGERPRINT", HARDCODED_FINGERPRINT)
     session_id = get_header_value("X_CLIENT_SESSION_ID", HARDCODED_SESSION_ID)
     
-    target_dates_str = args.dates or os.getenv("TARGET_DATES", "2026-08-15")
+    target_dates_str = args.dates or os.getenv("TARGET_DATES", "2026-10-09,2026-10-10,2026-10-11")
     target_dates = [d.strip() for d in target_dates_str.split(",") if d.strip()]
-    
-    monitor = BookingMonitor(bot_token, chat_id, cookie, target_dates, user_agent, fingerprint, session_id, state_file=args.state_file, party_size=args.party_size)
+
+    monitor = BookingMonitor(bot_token, chat_id, cookie, target_dates, user_agent, fingerprint, session_id, state_file=args.state_file, party_size=args.party_size, latest_time=args.latest_time)
     monitor.debug_mode = args.debug
     
     if args.test_notify:

@@ -42,6 +42,33 @@ class TestMonitor(unittest.TestCase):
     @patch('monitor_booking_api.BookingMonitor.log')
     @patch('curl_cffi.requests.get')
     @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
+    def test_lunch_only_filter(self, mock_notify, mock_get, mock_log):
+        # latest_time="15:00"：午餐時段有 4 位才通知，晚餐時段即使有 4 位也忽略
+        monitor = BookingMonitor("t", "c", target_dates=["2026-10-10"], party_size=4, latest_time="15:00")
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "default": {"2026-10-10": {"status": "open", "times": {"12:00": [4], "18:00": [4]}}}
+        }
+        mock_get.return_value = mock_response
+
+        self.assertTrue(monitor.check_booking_status())
+        msg = mock_notify.call_args[0][0]
+        self.assertIn("12:00", msg)
+        self.assertNotIn("18:00", msg)
+
+        # 只有晚餐有 4 位時 -> 不通知
+        mock_notify.reset_mock()
+        monitor2 = BookingMonitor("t", "c", target_dates=["2026-10-10"], party_size=4, latest_time="15:00")
+        mock_response.json.return_value = {
+            "default": {"2026-10-10": {"status": "open", "times": {"18:00": [4]}}}
+        }
+        self.assertFalse(monitor2.check_booking_status())
+        mock_notify.assert_not_called()
+
+    @patch('monitor_booking_api.BookingMonitor.log')
+    @patch('curl_cffi.requests.get')
+    @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
     def test_open_but_no_seats_for_two(self, mock_notify, mock_get, mock_log):
         # 日期開放但所有時段都沒有 2 位的位子 -> 不通知
         mock_response = MagicMock()
