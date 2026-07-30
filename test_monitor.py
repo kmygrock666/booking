@@ -200,6 +200,38 @@ class TestMonitor(unittest.TestCase):
             m2.check_booking_status()
             mock_notify.assert_called_once()  # 重啟後仍被擋：不重發
 
+    def test_booking_url_prefill(self):
+        # 預填連結可被反解為正確的 date/time/adults
+        import base64, json
+        from urllib.parse import urlparse, parse_qs
+        monitor = BookingMonitor("t", "c", party_size=4)
+        url = monitor.booking_url("2026-10-10", "12:00")
+        token = parse_qs(urlparse(url).query)["pre_filled_form"][0]
+        payload = json.loads(base64.b64decode(token))
+        self.assertEqual(payload["date"], "2026-10-10")
+        self.assertEqual(payload["time"], "12:00")
+        self.assertEqual(payload["adults"], 4)
+        # 無日期時退回一般訂位頁
+        self.assertNotIn("pre_filled_form", monitor.booking_url())
+
+    @patch('monitor_booking_api.BookingMonitor._auto_open')
+    @patch('monitor_booking_api.BookingMonitor.log')
+    @patch('curl_cffi.requests.get')
+    @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
+    def test_auto_open_on_hit(self, mock_notify, mock_get, mock_log, mock_open):
+        # 抓到目標時段時，用預填連結呼叫 _auto_open
+        monitor = BookingMonitor("t", "c", target_dates=["2026-10-10"], party_size=4, latest_time="15:00", auto_open=True)
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "default": {"2026-10-10": {"status": "open", "times": {"12:00": [4], "18:00": [4]}}}
+        }
+        mock_get.return_value = mock_response
+
+        self.assertTrue(monitor.check_booking_status())
+        mock_open.assert_called_once()
+        self.assertIn("pre_filled_form", mock_open.call_args[0][0])
+
     @patch('monitor_booking_api.BookingMonitor.send_telegram_notification')
     def test_heartbeat(self, mock_notify):
         # Run heartbeat logic from main

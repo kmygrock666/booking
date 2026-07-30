@@ -2,7 +2,9 @@ from curl_cffi import requests
 import html
 import time
 import json
+import base64
 import argparse
+import subprocess
 from datetime import datetime
 from urllib.parse import quote
 import os
@@ -50,13 +52,14 @@ DEFAULT_HEADERS = {
 }
 
 class BookingMonitor:
-    def __init__(self, bot_token, chat_id, cookie="", target_dates=None, user_agent=None, fingerprint=None, session_id=None, state_file=None, party_size=2, latest_time=None):
+    def __init__(self, bot_token, chat_id, cookie="", target_dates=None, user_agent=None, fingerprint=None, session_id=None, state_file=None, party_size=2, latest_time=None, auto_open=False):
         self.bot_token = bot_token
         self.chat_id = chat_id
         self.cookie = cookie
         self.target_dates = target_dates or ["2026-10-09", "2026-10-10", "2026-10-11"]
         self.party_size = party_size  # 只在時段可訂這個人數時才通知
         self.latest_time = latest_time  # 只通知早於此時間的時段 (HH:MM，如 "15:00" 代表只要午餐)，None 表示不限
+        self.auto_open = auto_open  # 抓到目標時段時，自動在本機開啟預填訂位頁
         self.user_agent = user_agent
         self.fingerprint = fingerprint
         self.session_id = session_id
@@ -154,6 +157,34 @@ class BookingMonitor:
             and (self.latest_time is None or t < self.latest_time)
         )
 
+    def booking_url(self, date=None, time=None):
+        # 帶 pre_filled_form 參數的訂位連結：inline 會用它把日期/時段/人數預填進表單
+        # (base64 的 JSON，欄位為 date/time/adults/kids，人數=adults+kids)
+        if not date:
+            return BOOKING_URL
+        payload = {"date": date, "adults": self.party_size, "kids": 0}
+        if time:
+            payload["time"] = time
+        token = base64.b64encode(json.dumps(payload).encode()).decode()
+        return f"{BOOKING_URL}?pre_filled_form={quote(token)}"
+
+    def _auto_open(self, url):
+        # 在本機自動彈開瀏覽器，把「收到→開始填」的時間差歸零；CI/無桌面環境自動略過
+        if not self.auto_open or os.getenv("GITHUB_ACTIONS"):
+            return
+        try:
+            if sys.platform == "darwin":
+                subprocess.run(["open", url], check=False)
+            elif sys.platform.startswith("linux"):
+                subprocess.run(["xdg-open", url], check=False)
+            elif sys.platform.startswith("win"):
+                os.startfile(url)  # type: ignore[attr-defined]
+            else:
+                return
+            self.log("已自動開啟預填訂位頁。")
+        except Exception as e:
+            self.log(f"自動開啟訂位頁失敗: {e}")
+
     def check_booking_status(self):
         self.log(f"Checking booking status for dates: {', '.join(self.target_dates)}")
         try:
@@ -213,16 +244,22 @@ class BookingMonitor:
 
             if available_days:
                 self.log(f"Found {len(available_days)} target open days! (all open: {len(all_open_dates)})")
+                # 預填連結指向最早的目標日期+時段，讓手機點連結、本機自動開都直接帶入日期/人數
+                first_date = sorted(target_slots)[0]
+                first_time = target_slots[first_date][0]
+                prefill_url = self.booking_url(first_date, first_time)
+                target_link = f'<a href="{prefill_url}">👉 立即預填訂位 ({first_date} {first_time} / {self.party_size}位)</a>'
                 # 時段內容和上次響鈴通知相同就不再響，避免持續開放期間每輪都轟炸
                 if target_slots != self.notified_target_slots:
                     msg = (
                         f"<b>🎯 TARGET DATES OPEN!</b>\n\n"
                         + "\n\n".join(available_days) + "\n\n"
                         + all_open_section + "\n\n"
-                        + booking_link + "\n\n"
+                        + target_link + "\n\n"
                         + snapshot_note
                     )
                     self.send_telegram_notification(msg)
+                    self._auto_open(prefill_url)
                 else:
                     self.log("Target slots unchanged since last notification; skipping.")
                 self.notified_target_slots = target_slots
@@ -275,6 +312,8 @@ def main():
     parser.add_argument("--dates", type=str, help="Comma-separated target dates (overrides .env).")
     parser.add_argument("--party-size", type=int, default=int(os.getenv("PARTY_SIZE", "4")), help="Notify only when a slot can seat this many people (default: 4).")
     parser.add_argument("--latest-time", type=str, default=os.getenv("LATEST_TIME", "15:00"), help="Only notify for slots earlier than this HH:MM (default: 15:00 for lunch; set to 24:00 for all day).")
+    parser.add_argument("--no-auto-open", dest="auto_open", action="store_false", help="Do not auto-open the pre-filled booking page locally when a target slot is found (auto-open is on by default).")
+    parser.set_defaults(auto_open=True)
     parser.add_argument("--debug", action="store_true", help="Enable debug mode to show raw API response.")
     parser.add_argument("--state-file", type=str, default=os.getenv("STATE_FILE") or ".booking_state.json", help="Path to a JSON file for persisting notification state across runs/restarts.")
     
@@ -295,7 +334,7 @@ def main():
     target_dates_str = args.dates or os.getenv("TARGET_DATES", "2026-10-09,2026-10-10,2026-10-11")
     target_dates = [d.strip() for d in target_dates_str.split(",") if d.strip()]
 
-    monitor = BookingMonitor(bot_token, chat_id, cookie, target_dates, user_agent, fingerprint, session_id, state_file=args.state_file, party_size=args.party_size, latest_time=args.latest_time)
+    monitor = BookingMonitor(bot_token, chat_id, cookie, target_dates, user_agent, fingerprint, session_id, state_file=args.state_file, party_size=args.party_size, latest_time=args.latest_time, auto_open=args.auto_open)
     monitor.debug_mode = args.debug
     
     if args.test_notify:
