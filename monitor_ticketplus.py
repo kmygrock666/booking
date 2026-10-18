@@ -13,9 +13,21 @@ load_dotenv()
 
 # Configuration — 田馥甄 2026 台北小巨蛋，場次與區域由參數指定
 EVENT_ID = "af2bd66d8fe65d78963cbb5bdc85771c"
-DEFAULT_SESSION_ID = "5f56e43c4c02a92b92a701ad89f88784"  # 12/20 場次
-# 區域名稱如 "特1區5200"，預設只監控 特1 ~ 特8
-DEFAULT_AREA_REGEX = r"^特[1-8]區"
+# 預設監控的場次；sessionId 為購票網址最後一段，area_regex 比對區域名稱（如 "特1區5200"）
+TARGETS = [
+    {
+        "label": "田馥甄 12/20 特1~特8",
+        "session_id": "5f56e43c4c02a92b92a701ad89f88784",
+        "area_regex": r"^特[1-8]區",
+        "state_file": ".ticketplus_state.json",
+    },
+    {
+        "label": "田馥甄 12/15 全區",
+        "session_id": "95f23e400e61052b487387acfb7b1a89",
+        "area_regex": r".",
+        "state_file": ".ticketplus_1215_state.json",
+    },
+]
 # 身障區需資格才能購買，預設排除
 EXCLUDE_AREA_REGEX = r"身障"
 
@@ -129,7 +141,7 @@ class TicketMonitor:
                 "_": int(time.time() * 1000),
             })
             areas = sorted(data["result"]["ticketArea"], key=lambda a: a.get("sortedIndex", 0))
-            self.log(" ".join(f"{a['ticketAreaName'].split('區')[0]}={a['status']}" for a in areas))
+            self.log(f"[{self.label}] " + " ".join(f"{a['ticketAreaName'].split('區')[0]}={a['status']}" for a in areas))
 
             if self.last_error:
                 self.last_error = None
@@ -188,14 +200,14 @@ class TicketMonitor:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Monitor Ticketplus 特1~特8 areas; notify when tickets are released.")
+    parser = argparse.ArgumentParser(description="Monitor Ticketplus sessions; notify when tickets are released.")
     parser.add_argument("--test-notify", action="store_true", help="Send a test notification and exit.")
     parser.add_argument("--once", action="store_true", help="Run the check once and exit.")
     parser.add_argument("--interval", type=int, default=10, help="Check interval in seconds (default: 10).")
-    parser.add_argument("--session-id", type=str, default=DEFAULT_SESSION_ID, help="Ticketplus sessionId (last segment of the order URL).")
-    parser.add_argument("--area-regex", type=str, default=DEFAULT_AREA_REGEX, help="Regex on area name; use '.' for all areas.")
-    parser.add_argument("--label", type=str, default="田馥甄 12/20 特1~特8", help="Name shown in notifications.")
-    parser.add_argument("--state-file", type=str, default=".ticketplus_state.json", help="Path to a JSON file for persisting notification state across runs/restarts.")
+    parser.add_argument("--session-id", type=str, help="Monitor only this sessionId instead of the built-in TARGETS.")
+    parser.add_argument("--area-regex", type=str, default=".", help="With --session-id: regex on area name (default: all areas).")
+    parser.add_argument("--label", type=str, help="With --session-id: name shown in notifications.")
+    parser.add_argument("--state-file", type=str, help="With --session-id: path to a JSON file for persisting notification state.")
 
     args = parser.parse_args()
 
@@ -206,19 +218,35 @@ def main():
         print("❌ Error: TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be set.")
         sys.exit(1)
 
-    monitor = TicketMonitor(bot_token, chat_id, args.session_id, args.area_regex, args.label, state_file=args.state_file)
+    if args.session_id:
+        targets = [{
+            "label": args.label or args.session_id,
+            "session_id": args.session_id,
+            "area_regex": args.area_regex,
+            "state_file": args.state_file or f".ticketplus_{args.session_id}_state.json",
+        }]
+    else:
+        targets = TARGETS
+
+    monitors = [
+        TicketMonitor(bot_token, chat_id, t["session_id"], t["area_regex"], t["label"], state_file=t["state_file"])
+        for t in targets
+    ]
 
     if args.test_notify:
-        monitor.send_telegram_notification(f"<b>🔔 Test Notification</b>\n{html.escape(args.label)} 監控已啟動。\n{monitor.order_url}")
+        lines = "\n".join(f"• {html.escape(m.label)}\n{m.order_url}" for m in monitors)
+        monitors[0].send_telegram_notification(f"<b>🔔 Test Notification</b>\nTicketplus 監控已啟動：\n{lines}")
         return
 
     if args.once:
-        monitor.check()
+        for monitor in monitors:
+            monitor.check()
         return
 
-    monitor.log(f"Starting Ticketplus monitor [{args.label}] with {args.interval}s interval...")
+    monitors[0].log(f"Starting Ticketplus monitor [{', '.join(m.label for m in monitors)}] with {args.interval}s interval...")
     while True:
-        monitor.check()
+        for monitor in monitors:
+            monitor.check()
         time.sleep(args.interval)
 
 
