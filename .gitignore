@@ -14,3 +14,5 @@ venv/
 # Monitor state
 .booking_state.json
 .vthg_quota_state.json
+.ticketplus_*state.json
+ticketplus_*monitor.log
